@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bay Area Revenue Cycle Ledger — San Mateo Medical Center</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --bg: #0B1420;
+    --surface: #13223A;
+    --surface-2: #182A45;
+    --hairline: #26394F;
+    --text: #E7ECF2;
+    --text-dim: #8CA0B5;
+    --teal: #5FB3A3;
+    --brick: #C1654F;
+    --brass: #C9A24B;
+    --slate: #5A6B7A;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:'IBM Plex Sans', sans-serif; overflow:hidden; }
+  h1,h2,h3{ font-family:'Source Serif 4', Georgia, serif; font-weight:600; margin:0; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  #app{ display:flex; flex-direction:column; height:100vh; }
+
+  header.topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid var(--hairline);
+    background:linear-gradient(180deg, #0E1826, #0B1420);
+    flex-shrink:0;
+  }
+  .brand .eyebrow{
+    display:block; font-family:'IBM Plex Mono', monospace; font-size:11px;
+    letter-spacing:0.08em; text-transform:uppercase; color:var(--brass); margin-bottom:4px;
+  }
+  .brand h1{ font-size:22px; color:var(--text); letter-spacing:0.01em; }
+
+  nav.tabs{ display:flex; gap:4px; background:var(--surface); border:1px solid var(--hairline); border-radius:6px; padding:4px; }
+  nav.tabs button{
+    font-family:'IBM Plex Sans', sans-serif; font-size:13px; font-weight:500;
+    color:var(--text-dim); background:transparent; border:none; padding:8px 16px;
+    border-radius:4px; cursor:pointer; transition:all 0.15s ease;
+  }
+  nav.tabs button:hover{ color:var(--text); }
+  nav.tabs button.active{ background:var(--surface-2); color:var(--text); box-shadow: inset 0 0 0 1px var(--hairline); }
+
+  main{ flex:1; position:relative; overflow:hidden; }
+  .view{ position:absolute; inset:0; display:none; }
+  .view.active{ display:flex; }
+
+  /* ---- 3D view ---- */
+  #view-3d{ flex-direction:column; }
+  .scene-controls{
+    display:flex; align-items:center; gap:18px; padding:12px 28px;
+    border-bottom:1px solid var(--hairline); flex-shrink:0; flex-wrap:wrap;
+  }
+  .control-label{ font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; }
+  .metric-btn{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text-dim);
+    background:var(--surface); border:1px solid var(--hairline); padding:6px 12px;
+    border-radius:4px; cursor:pointer;
+  }
+  .metric-btn.active{ background:var(--surface-2); color:var(--teal); border-color:var(--teal); }
+  .legend{ display:flex; gap:14px; margin-left:auto; align-items:center; }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-dim); }
+  .legend-item i{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .gold-ring{ width:10px; height:10px; border-radius:2px; border:2px solid var(--brass); background:transparent !important; }
+  .scene-note{ padding:8px 28px; font-size:12px; color:var(--text-dim); line-height:1.5; border-bottom:1px solid var(--hairline); flex-shrink:0; }
+
+  .scene-wrap{ flex:1; position:relative; }
+  #canvas-container{ position:absolute; inset:0; }
+
+  #info-panel{
+    position:absolute; top:16px; right:16px; width:280px;
+    background:var(--surface); border:1px solid var(--hairline); border-radius:8px;
+    padding:0; box-shadow:0 12px 32px rgba(0,0,0,0.4); overflow:hidden;
+    transition:opacity 0.15s ease, transform 0.15s ease;
+  }
+  #info-panel.hidden{ opacity:0; pointer-events:none; transform:translateY(-6px); }
+  .statement-head{ background:var(--surface-2); padding:12px 16px; border-bottom:1px dashed var(--hairline); }
+  .statement-head .county-tag{ font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--brass); }
+  .statement-head h3{ font-size:15px; margin-top:4px; line-height:1.3; }
+  .statement-body{ padding:12px 16px; }
+  .statement-row{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--hairline); font-size:12px; }
+  .statement-row:last-child{ border-bottom:none; }
+  .statement-row .label{ color:var(--text-dim); }
+  .statement-row .value{ font-family:'IBM Plex Mono', monospace; color:var(--text); }
+  .statement-row .value.pos{ color:var(--teal); }
+  .statement-row .value.neg{ color:var(--brick); }
+  .statement-foot{ padding:10px 16px; font-size:10px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; border-top:1px dashed var(--hairline); }
+
+  /* ---- comparison view ---- */
+  #view-compare{ overflow-y:auto; padding:24px 28px; }
+  .chart-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1200px; margin:0 auto; }
+  .chart-card{ background:var(--surface); border:1px solid var(--hairline); border-radius:8px; padding:18px 20px; }
+  .chart-card.wide{ grid-column:1 / -1; }
+  .chart-card h3{ font-size:15px; margin-bottom:12px; font-weight:600; }
+  /* Fixed-height wrapper is what Chart.js actually measures -- putting a height
+     constraint directly on <canvas> conflicts with Chart.js's own sizing logic
+     and was causing it to under-measure available space and auto-skip axis labels */
+  .chart-canvas-wrap{ position:relative; height:340px; }
+  .chart-canvas-wrap.short{ height:300px; }
+
+  /* ---- methodology view ---- */
+  #view-method{ overflow-y:auto; padding:32px 28px; justify-content:center; }
+  .method-wrap{ max-width:760px; margin:0 auto; }
+  .method-wrap > p.intro{ color:var(--text-dim); font-size:14px; line-height:1.6; margin-bottom:28px; }
+  ol.method-steps{ list-style:none; margin:0; padding:0; counter-reset:step; }
+  ol.method-steps li{ display:flex; gap:18px; padding:18px 0; border-bottom:1px solid var(--hairline); }
+  ol.method-steps li:last-child{ border-bottom:none; }
+  .step-num{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--brass); flex-shrink:0; width:28px; padding-top:2px; }
+  .method-steps h3{ font-size:15px; margin-bottom:4px; }
+  .method-steps p{ font-size:13px; color:var(--text-dim); line-height:1.55; margin:0; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="eyebrow">Prepared for San Mateo Medical Center · Patient Financial Services</span>
+      <h1>Bay Area Revenue Cycle Ledger</h1>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-view="view-3d">Facility Map</button>
+      <button class="tab" data-view="view-compare">County Comparison</button>
+      <button class="tab" data-view="view-method">Methodology</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-3d" class="view active">
+      <div class="scene-controls">
+        <span class="control-label">Bar height</span>
+        <button class="metric-btn active" data-metric="revenue_per_discharge">Revenue / Discharge</button>
+        <button class="metric-btn" data-metric="occupancy_rate">Occupancy Rate</button>
+        <div class="legend">
+          <span class="legend-item"><i style="background:#C1654F"></i> Loss</span>
+          <span class="legend-item"><i style="background:#5A6B7A"></i> Breakeven</span>
+          <span class="legend-item"><i style="background:#5FB3A3"></i> Surplus</span>
+          <span class="legend-item"><span class="gold-ring"></span> San Mateo County</span>
+        </div>
+      </div>
+      <div class="scene-note">Bars are individual hospitals. A county's combined margin (see County Comparison) can look healthy even when a specific facility inside it — like San Mateo Medical Center — is running a deficit, since larger or more commercially-insured facilities in the same county can offset it in the total.</div>
+      <div class="scene-wrap">
+        <div id="canvas-container"></div>
+        <div id="info-panel" class="hidden"></div>
+      </div>
+    </section>
+
+    <section id="view-compare" class="view">
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Operating Margin by County (Q1 2026)</h3>
+          <div class="chart-canvas-wrap short"><canvas id="marginChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Payer Mix by County</h3>
+          <div class="chart-canvas-wrap short"><canvas id="payerChart"></canvas></div>
+        </div>
+        <div class="chart-card wide">
+          <h3>Margin vs. Discharges per 1,000 Residents</h3>
+          <div class="chart-canvas-wrap"><canvas id="scatterChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-method" class="view">
+      <div class="method-wrap">
+        <p class="intro">This dashboard is built on three public datasets, joined and validated step by step rather than merged blindly. Each step below is a real decision made against the actual data, not a template pipeline.</p>
+        <ol class="method-steps">
+          <li><span class="step-num">01</span><div><h3>Three source files, three formats</h3><p>CA HCAI Q1 2026 Hospital Quarterly Financial &amp; Utilization Report, the HCAI 2025 Annual Utilization Report, and CA Dept. of Finance county population estimates — each with different column names, header structures, and shapes.</p></div></li>
+          <li><span class="step-num">02</span><div><h3>Caught three data-quality bugs before merging</h3><p>Multi-word county names split across two physical rows in the population file, one county's year field stored as text instead of a number, and leftover whitespace from stitching names back together — each verified with before/after checks, not assumed fixed.</p></div></li>
+          <li><span class="step-num">03</span><div><h3>Validated join keys first</h3><p>Confirmed facility numbers matched exactly between the two HCAI files, and county names matched the population file, before running any merge — a merge on an unverified key silently drops or duplicates rows with no error thrown.</p></div></li>
+          <li><span class="step-num">04</span><div><h3>Scoped to the Bay Area, not all of "Northern California"</h3><p>Checked first: a wider Northern CA region would include 9 counties represented by a single hospital each — turning a "county comparison" into one facility's numbers wearing a county label. The Bay Area (9 counties, all multi-hospital) keeps every comparison statistically real.</p></div></li>
+          <li><span class="step-num">05</span><div><h3>Applied a volume floor</h3><p>Excluded 3 facilities under 50 discharges/quarter from ratio-based comparisons — a 5-discharge pediatric specialty hospital produced a $940K "revenue per discharge" figure that reflected sample size, not performance.</p></div></li>
+          <li><span class="step-num">06</span><div><h3>Aggregated counties by summing dollars first, not averaging ratios</h3><p>County-level margin is computed from summed revenue and summed expense, then divided — not by averaging each hospital's individual margin. Averaging ratios directly would let a small hospital's percentage count as much as a large one's, misrepresenting the county.</p></div></li>
+          <li><span class="step-num">07</span><div><h3>Flagged statistical outliers</h3><p>Napa County sits at &minus;2.34 standard deviations from the Bay Area mean margin — driven by Napa State Hospital's non-standard state-funded structure, not a data error. Explained in context rather than just labeled an outlier.</p></div></li>
+          <li><span class="step-num">08</span><div><h3>Exported a lean, purpose-built dataset</h3><p>72 facilities, 9 counties, only the fields this dashboard actually visualizes — not the full 156-column working table.</p></div></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+// =====================================================================
+// DATA
+// =====================================================================
+const DATA = {"facilities": [{"name": "ADVENTIST HEALTH ST. HELENA", "county": "Napa", "licensed_beds": 150, "staffed_beds": 66, "discharges": 1030, "net_revenue": 65557836, "operating_expense": 73175084, "occupancy_rate": 0.94, "revenue_per_discharge": 63648.38, "margin_pct": -11.62, "pct_medicare": 50.2, "pct_medical": 20.62, "pct_commercial": 26.46}, {"name": "ADVENTIST HEALTH VALLEJO", "county": "Solano", "licensed_beds": 61, "staffed_beds": 60, "discharges": 536, "net_revenue": 8334291, "operating_expense": 9419830, "occupancy_rate": 0.94, "revenue_per_discharge": 15549.05, "margin_pct": -13.02, "pct_medicare": 9.69, "pct_medical": 30.08, "pct_commercial": 60.23}, {"name": "AHMC SETON MEDICAL CENTER", "county": "San Mateo", "licensed_beds": 377, "staffed_beds": 377, "discharges": 591, "net_revenue": 32517104, "operating_expense": 45474808, "occupancy_rate": 0.4, "revenue_per_discharge": 55020.48, "margin_pct": -39.85, "pct_medicare": 45.66, "pct_medical": 31.25, "pct_commercial": 14.08}, {"name": "ALAMEDA HOSPITAL", "county": "Alameda", "licensed_beds": 247, "staffed_beds": 247, "discharges": 709, "net_revenue": 29064089, "operating_expense": 41623325, "occupancy_rate": 0.85, "revenue_per_discharge": 40993.07, "margin_pct": -43.21, "pct_medicare": 41.09, "pct_medical": 40.82, "pct_commercial": 17.67}, {"name": "ALTA BATES SUMMIT MEDICAL CENTER", "county": "Alameda", "licensed_beds": 309, "staffed_beds": 219, "discharges": 3376, "net_revenue": 166054336, "operating_expense": 161416872, "occupancy_rate": 0.98, "revenue_per_discharge": 49186.71, "margin_pct": 2.79, "pct_medicare": 40.85, "pct_medical": 24.64, "pct_commercial": 33.63}, {"name": "ALTA BATES SUMMIT MEDICAL CENTER - ALTA BATES CAMPUS", "county": "Alameda", "licensed_beds": 393, "staffed_beds": 223, "discharges": 3592, "net_revenue": 264085554, "operating_expense": 249585084, "occupancy_rate": 0.99, "revenue_per_discharge": 73520.48, "margin_pct": 5.49, "pct_medicare": 36.27, "pct_medical": 23.89, "pct_commercial": 39.76}, {"name": "AURORA BEHAVIORAL HEALTHCARE - SANTA ROSA", "county": "Sonoma", "licensed_beds": 144, "staffed_beds": 130, "discharges": 1008, "net_revenue": 18559855, "operating_expense": 18414443, "occupancy_rate": 1.0, "revenue_per_discharge": 18412.55, "margin_pct": 0.78, "pct_medicare": 25.01, "pct_medical": 13.68, "pct_commercial": 13.74}, {"name": "CALIFORNIA PACIFIC MEDICAL CENTER - MISSION BERNAL CAMPUS", "county": "San Francisco", "licensed_beds": 98, "staffed_beds": 78, "discharges": 1442, "net_revenue": 54472880, "operating_expense": 61219354, "occupancy_rate": 0.98, "revenue_per_discharge": 37775.92, "margin_pct": -12.39, "pct_medicare": 46.97, "pct_medical": 6.96, "pct_commercial": 44.27}, {"name": "CALIFORNIA PACIFIC MEDICAL CENTER - VAN NESS CAMPUS", "county": "San Francisco", "licensed_beds": 489, "staffed_beds": 376, "discharges": 5515, "net_revenue": 420060576, "operating_expense": 397383103, "occupancy_rate": 0.97, "revenue_per_discharge": 76166.92, "margin_pct": 5.4, "pct_medicare": 28.03, "pct_medical": 14.0, "pct_commercial": 57.1}, {"name": "CHINESE HOSPITAL", "county": "San Francisco", "licensed_beds": 88, "staffed_beds": 36, "discharges": 370, "net_revenue": 28201453, "operating_expense": 37357102, "occupancy_rate": 0.99, "revenue_per_discharge": 76220.14, "margin_pct": -32.47, "pct_medicare": 69.93, "pct_medical": 10.75, "pct_commercial": 17.79}, {"name": "CONTRA COSTA REGIONAL MEDICAL CENTER", "county": "Contra Costa", "licensed_beds": 167, "staffed_beds": 116, "discharges": 1895, "net_revenue": 182761873, "operating_expense": 216758037, "occupancy_rate": 1.0, "revenue_per_discharge": 96444.26, "margin_pct": -18.6, "pct_medicare": 7.03, "pct_medical": 85.03, "pct_commercial": 8.21}, {"name": "CRESTWOOD SOLANO PSYCHIATRIC HEALTH FACILITY", "county": "Solano", "licensed_beds": 16, "staffed_beds": 16, "discharges": 100, "net_revenue": 1402172, "operating_expense": 1394178, "occupancy_rate": 0.78, "revenue_per_discharge": 14021.72, "margin_pct": 0.57, "pct_medicare": 0.0, "pct_medical": 0.0, "pct_commercial": 0.0}, {"name": "EDEN MEDICAL CENTER", "county": "Alameda", "licensed_beds": 130, "staffed_beds": 121, "discharges": 2205, "net_revenue": 120408713, "operating_expense": 111472965, "occupancy_rate": 0.99, "revenue_per_discharge": 54607.13, "margin_pct": 7.42, "pct_medicare": 24.05, "pct_medical": 25.05, "pct_commercial": 50.9}, {"name": "EL CAMINO HEALTH", "county": "Santa Clara", "licensed_beds": 471, "staffed_beds": 471, "discharges": 5625, "net_revenue": 426466304, "operating_expense": 376141077, "occupancy_rate": 0.65, "revenue_per_discharge": 75816.23, "margin_pct": 11.8, "pct_medicare": 26.89, "pct_medical": 3.23, "pct_commercial": 69.45}, {"name": "FREMONT HOSPITAL", "county": "Alameda", "licensed_beds": 148, "staffed_beds": 148, "discharges": 1188, "net_revenue": 20584714, "operating_expense": 16260857, "occupancy_rate": 0.91, "revenue_per_discharge": 17327.2, "margin_pct": 21.01, "pct_medicare": 11.11, "pct_medical": 22.55, "pct_commercial": 33.59}, {"name": "GOOD SAMARITAN HOSPITAL - SAN JOSE", "county": "Santa Clara", "licensed_beds": 474, "staffed_beds": 336, "discharges": 4458, "net_revenue": 198128182, "operating_expense": 173220636, "occupancy_rate": 0.75, "revenue_per_discharge": 44443.29, "margin_pct": 12.57, "pct_medicare": 28.11, "pct_medical": 2.21, "pct_commercial": 58.42}, {"name": "HEALDSBURG HOSPITAL", "county": "Sonoma", "licensed_beds": 38, "staffed_beds": 28, "discharges": 206, "net_revenue": 14880053, "operating_expense": 17143659, "occupancy_rate": 0.92, "revenue_per_discharge": 72233.27, "margin_pct": -15.21, "pct_medicare": 48.35, "pct_medical": 29.88, "pct_commercial": 21.52}, {"name": "HIGHLAND HOSPITAL", "county": "Alameda", "licensed_beds": 449, "staffed_beds": 438, "discharges": 3563, "net_revenue": 231874078, "operating_expense": 370266311, "occupancy_rate": 0.84, "revenue_per_discharge": 65078.33, "margin_pct": -59.68, "pct_medicare": 21.62, "pct_medical": 67.91, "pct_commercial": 8.44}, {"name": "JEWISH HOME & REHAB CENTER", "county": "San Francisco", "licensed_beds": 375, "staffed_beds": 345, "discharges": 336, "net_revenue": 26526890, "operating_expense": 26758601, "occupancy_rate": 1.0, "revenue_per_discharge": 78949.08, "margin_pct": -0.87, "pct_medicare": 33.4, "pct_medical": 58.7, "pct_commercial": 7.42}, {"name": "JOHN MUIR BEHAVIORAL HEALTH CENTER", "county": "Contra Costa", "licensed_beds": 73, "staffed_beds": 71, "discharges": 830, "net_revenue": 12139968, "operating_expense": 13432218, "occupancy_rate": 0.8, "revenue_per_discharge": 14626.47, "margin_pct": -10.64, "pct_medicare": 15.42, "pct_medical": 42.73, "pct_commercial": 41.81}, {"name": "JOHN MUIR MEDICAL CENTER - CONCORD CAMPUS", "county": "Contra Costa", "licensed_beds": 276, "staffed_beds": 206, "discharges": 3107, "net_revenue": 211554020, "operating_expense": 208091919, "occupancy_rate": 0.82, "revenue_per_discharge": 68089.48, "margin_pct": 1.64, "pct_medicare": 60.5, "pct_medical": 18.55, "pct_commercial": 20.75}, {"name": "JOHN MUIR MEDICAL CENTER - WALNUT CREEK", "county": "Contra Costa", "licensed_beds": 427, "staffed_beds": 317, "discharges": 5294, "net_revenue": 327488760, "operating_expense": 336104669, "occupancy_rate": 0.96, "revenue_per_discharge": 61860.36, "margin_pct": -2.63, "pct_medicare": 51.97, "pct_medical": 16.88, "pct_commercial": 30.68}, {"name": "KAISER FOUNDATION HOSPITAL - ANTIOCH", "county": "Contra Costa", "licensed_beds": 150, "staffed_beds": 101, "discharges": 2320, "net_revenue": 146888103, "operating_expense": 139663812, "occupancy_rate": 1.0, "revenue_per_discharge": 63313.84, "margin_pct": 4.92, "pct_medicare": 28.08, "pct_medical": 7.07, "pct_commercial": 64.69}, {"name": "KAISER FOUNDATION HOSPITAL - FREMONT", "county": "Alameda", "licensed_beds": 100, "staffed_beds": 71, "discharges": 1279, "net_revenue": 97991533, "operating_expense": 93992551, "occupancy_rate": 0.99, "revenue_per_discharge": 76615.74, "margin_pct": 4.08, "pct_medicare": 26.25, "pct_medical": 5.12, "pct_commercial": 68.53}, {"name": "KAISER FOUNDATION HOSPITAL - OAKLAND/RICHMOND", "county": "Alameda", "licensed_beds": 365, "staffed_beds": 271, "discharges": 4883, "net_revenue": 341251788, "operating_expense": 350421674, "occupancy_rate": 1.0, "revenue_per_discharge": 69885.68, "margin_pct": -2.69, "pct_medicare": 24.61, "pct_medical": 6.73, "pct_commercial": 69.02}, {"name": "KAISER FOUNDATION HOSPITAL - REDWOOD CITY", "county": "San Mateo", "licensed_beds": 153, "staffed_beds": 85, "discharges": 2100, "net_revenue": 127952587, "operating_expense": 125718195, "occupancy_rate": 0.99, "revenue_per_discharge": 60929.8, "margin_pct": 1.75, "pct_medicare": 23.44, "pct_medical": 4.12, "pct_commercial": 72.38}, {"name": "KAISER FOUNDATION HOSPITAL - SAN FRANCISCO", "county": "San Francisco", "licensed_beds": 239, "staffed_beds": 161, "discharges": 2684, "net_revenue": 221052228, "operating_expense": 217525067, "occupancy_rate": 1.0, "revenue_per_discharge": 82359.25, "margin_pct": 1.6, "pct_medicare": 27.29, "pct_medical": 3.85, "pct_commercial": 68.83}, {"name": "KAISER FOUNDATION HOSPITAL - SAN JOSE", "county": "Santa Clara", "licensed_beds": 247, "staffed_beds": 129, "discharges": 2805, "net_revenue": 195420299, "operating_expense": 176344768, "occupancy_rate": 1.0, "revenue_per_discharge": 69668.56, "margin_pct": 9.76, "pct_medicare": 23.28, "pct_medical": 3.55, "pct_commercial": 73.12}, {"name": "KAISER FOUNDATION HOSPITAL - SAN LEANDRO", "county": "Alameda", "licensed_beds": 216, "staffed_beds": 135, "discharges": 2876, "net_revenue": 193571050, "operating_expense": 193032110, "occupancy_rate": 1.0, "revenue_per_discharge": 67305.65, "margin_pct": 0.28, "pct_medicare": 23.21, "pct_medical": 5.12, "pct_commercial": 71.57}, {"name": "KAISER FOUNDATION HOSPITAL - SAN RAFAEL", "county": "Marin", "licensed_beds": 107, "staffed_beds": 54, "discharges": 1059, "net_revenue": 70583619, "operating_expense": 89271396, "occupancy_rate": 0.99, "revenue_per_discharge": 66651.2, "margin_pct": -26.48, "pct_medicare": 40.88, "pct_medical": 5.1, "pct_commercial": 54.01}, {"name": "KAISER FOUNDATION HOSPITAL - SANTA CLARA", "county": "Santa Clara", "licensed_beds": 343, "staffed_beds": 279, "discharges": 4383, "net_revenue": 394490406, "operating_expense": 346735788, "occupancy_rate": 1.0, "revenue_per_discharge": 90004.66, "margin_pct": 12.11, "pct_medicare": 23.01, "pct_medical": 3.3, "pct_commercial": 73.47}, {"name": "KAISER FOUNDATION HOSPITAL - SANTA ROSA", "county": "Sonoma", "licensed_beds": 172, "staffed_beds": 115, "discharges": 2683, "net_revenue": 133058687, "operating_expense": 147317521, "occupancy_rate": 1.0, "revenue_per_discharge": 49593.25, "margin_pct": -10.72, "pct_medicare": 33.86, "pct_medical": 1.59, "pct_commercial": 64.57}, {"name": "KAISER FOUNDATION HOSPITAL - SOUTH SAN FRANCISCO", "county": "San Mateo", "licensed_beds": 120, "staffed_beds": 89, "discharges": 1595, "net_revenue": 103848265, "operating_expense": 95201510, "occupancy_rate": 0.99, "revenue_per_discharge": 65108.63, "margin_pct": 8.33, "pct_medicare": 31.45, "pct_medical": 4.1, "pct_commercial": 64.28}, {"name": "KAISER FOUNDATION HOSPITAL - VACAVILLE", "county": "Solano", "licensed_beds": 150, "staffed_beds": 98, "discharges": 1799, "net_revenue": 141281355, "operating_expense": 136698366, "occupancy_rate": 1.0, "revenue_per_discharge": 78533.27, "margin_pct": 3.24, "pct_medicare": 30.09, "pct_medical": 8.61, "pct_commercial": 61.27}, {"name": "KAISER FOUNDATION HOSPITAL - WALNUT CREEK", "county": "Contra Costa", "licensed_beds": 249, "staffed_beds": 164, "discharges": 3324, "net_revenue": 207267565, "operating_expense": 221430478, "occupancy_rate": 0.99, "revenue_per_discharge": 62354.86, "margin_pct": -6.83, "pct_medicare": 26.04, "pct_medical": 4.13, "pct_commercial": 69.55}, {"name": "KAISER FOUNDATION HOSPITAL REHABILITATION CENTER - VALLEJO", "county": "Solano", "licensed_beds": 253, "staffed_beds": 155, "discharges": 2143, "net_revenue": 141136944, "operating_expense": 161842154, "occupancy_rate": 1.0, "revenue_per_discharge": 65859.52, "margin_pct": -14.67, "pct_medicare": 32.48, "pct_medical": -0.64, "pct_commercial": 68.05}, {"name": "KAISER PERMANENTE PHF - SANTA CLARA", "county": "Santa Clara", "licensed_beds": 24, "staffed_beds": 24, "discharges": 232, "net_revenue": 5610197, "operating_expense": 5452972, "occupancy_rate": 0.93, "revenue_per_discharge": 24181.88, "margin_pct": 2.8, "pct_medicare": 5.09, "pct_medical": 0.14, "pct_commercial": 94.8}, {"name": "KENTFIELD HOSPITAL", "county": "Marin", "licensed_beds": 117, "staffed_beds": 117, "discharges": 170, "net_revenue": 24004831, "operating_expense": 24291004, "occupancy_rate": 0.84, "revenue_per_discharge": 141204.89, "margin_pct": -1.19, "pct_medicare": 36.27, "pct_medical": 44.09, "pct_commercial": 18.44}, {"name": "KINDRED HOSPITAL - SAN FRANCISCO BAY AREA", "county": "Alameda", "licensed_beds": 99, "staffed_beds": 99, "discharges": 100, "net_revenue": 17123643, "operating_expense": 17123643, "occupancy_rate": 0.78, "revenue_per_discharge": 171236.43, "margin_pct": 0.0, "pct_medicare": 39.89, "pct_medical": 45.65, "pct_commercial": 14.46}, {"name": "LAGUNA HONDA HOSPITAL AND REHABILITATION CENTER", "county": "San Francisco", "licensed_beds": 780, "staffed_beds": 780, "discharges": 216, "net_revenue": 41122077, "operating_expense": 87659844, "occupancy_rate": 0.77, "revenue_per_discharge": 190379.99, "margin_pct": -113.17, "pct_medicare": 19.55, "pct_medical": 80.07, "pct_commercial": 0.39}, {"name": "LANGLEY PORTER PSYCHIATRIC INSTITUTE", "county": "San Francisco", "licensed_beds": 30, "staffed_beds": 30, "discharges": 216, "net_revenue": 6407219, "operating_expense": 9173376, "occupancy_rate": 0.74, "revenue_per_discharge": 29663.05, "margin_pct": -43.17, "pct_medicare": 44.45, "pct_medical": 0.0, "pct_commercial": 54.37}, {"name": "LUCILE SALTER PACKARD CHILDREN'S HOSPITAL AT STANFORD", "county": "Santa Clara", "licensed_beds": 410, "staffed_beds": 310, "discharges": 3925, "net_revenue": 689631784, "operating_expense": 692185888, "occupancy_rate": 0.91, "revenue_per_discharge": 175702.37, "margin_pct": -0.37, "pct_medicare": 0.73, "pct_medical": 21.31, "pct_commercial": 75.42}, {"name": "MARINHEALTH MEDICAL CENTER", "county": "Marin", "licensed_beds": 327, "staffed_beds": 235, "discharges": 2770, "net_revenue": 177896781, "operating_expense": 187326401, "occupancy_rate": 0.68, "revenue_per_discharge": 64222.66, "margin_pct": -5.3, "pct_medicare": 30.37, "pct_medical": 10.46, "pct_commercial": 57.24}, {"name": "MERRITT PERALTA INSTITUTE CDRH", "county": "Alameda", "licensed_beds": 24, "staffed_beds": 7, "discharges": 60, "net_revenue": 3015617, "operating_expense": 1165435, "occupancy_rate": 0.9, "revenue_per_discharge": 50260.28, "margin_pct": 61.35, "pct_medicare": 7.46, "pct_medical": 1.29, "pct_commercial": 91.25}, {"name": "MILLS-PENINSULA MEDICAL CENTER", "county": "San Mateo", "licensed_beds": 301, "staffed_beds": 197, "discharges": 3779, "net_revenue": 262531847, "operating_expense": 231684260, "occupancy_rate": 0.98, "revenue_per_discharge": 69471.25, "margin_pct": 11.75, "pct_medicare": 25.06, "pct_medical": 2.54, "pct_commercial": 71.8}, {"name": "NAPA STATE HOSPITAL", "county": "Napa", "licensed_beds": 1418, "staffed_beds": 1153, "discharges": 199, "net_revenue": 64664140, "operating_expense": 116019365, "occupancy_rate": 0.92, "revenue_per_discharge": 324945.43, "margin_pct": -79.42, "pct_medicare": 88.29, "pct_medical": 0.0, "pct_commercial": 0.05}, {"name": "NORTHBAY MEDICAL CENTER", "county": "Solano", "licensed_beds": 204, "staffed_beds": 183, "discharges": 2791, "net_revenue": 153799635, "operating_expense": 189322233, "occupancy_rate": 0.67, "revenue_per_discharge": 55105.57, "margin_pct": -23.1, "pct_medicare": 15.81, "pct_medical": 29.96, "pct_commercial": 63.16}, {"name": "NOVATO COMMUNITY HOSPITAL", "county": "Marin", "licensed_beds": 40, "staffed_beds": 19, "discharges": 491, "net_revenue": 29687996, "operating_expense": 28239849, "occupancy_rate": 0.99, "revenue_per_discharge": 60464.35, "margin_pct": 4.88, "pct_medicare": 47.97, "pct_medical": 9.19, "pct_commercial": 42.84}, {"name": "PETALUMA VALLEY HOSPITAL", "county": "Sonoma", "licensed_beds": 70, "staffed_beds": 22, "discharges": 454, "net_revenue": 22330768, "operating_expense": 23006585, "occupancy_rate": 0.9, "revenue_per_discharge": 49186.71, "margin_pct": -3.03, "pct_medicare": 30.93, "pct_medical": 23.24, "pct_commercial": 45.51}, {"name": "PROVIDENCE QUEEN OF THE VALLEY MEDICAL CENTER", "county": "Napa", "licensed_beds": 198, "staffed_beds": 72, "discharges": 1514, "net_revenue": 81074007, "operating_expense": 85117920, "occupancy_rate": 0.91, "revenue_per_discharge": 53549.54, "margin_pct": -4.99, "pct_medicare": 34.18, "pct_medical": 29.99, "pct_commercial": 33.99}, {"name": "PROVIDENCE SANTA ROSA MEMORIAL HOSPITAL", "county": "Sonoma", "licensed_beds": 329, "staffed_beds": 180, "discharges": 3033, "net_revenue": 177729881, "operating_expense": 185236562, "occupancy_rate": 0.91, "revenue_per_discharge": 58598.71, "margin_pct": -4.22, "pct_medicare": 38.54, "pct_medical": 23.04, "pct_commercial": 38.43}, {"name": "SAN JOSE BEHAVIORAL HEALTH", "county": "Santa Clara", "licensed_beds": 133, "staffed_beds": 133, "discharges": 1272, "net_revenue": 21687722, "operating_expense": 12803668, "occupancy_rate": 0.92, "revenue_per_discharge": 17050.1, "margin_pct": 40.96, "pct_medicare": 10.0, "pct_medical": 62.96, "pct_commercial": 27.04}, {"name": "SAN MATEO MEDICAL CENTER", "county": "San Mateo", "licensed_beds": 448, "staffed_beds": 448, "discharges": 815, "net_revenue": 112264198, "operating_expense": 135431345, "occupancy_rate": 0.94, "revenue_per_discharge": 137747.48, "margin_pct": -20.64, "pct_medicare": 9.7, "pct_medical": 87.49, "pct_commercial": 1.7}, {"name": "SAN RAMON REGIONAL MEDICAL CENTER", "county": "Contra Costa", "licensed_beds": 123, "staffed_beds": 42, "discharges": 940, "net_revenue": 44391108, "operating_expense": 46728938, "occupancy_rate": 0.97, "revenue_per_discharge": 47224.58, "margin_pct": -5.27, "pct_medicare": 30.11, "pct_medical": 3.23, "pct_commercial": 66.66}, {"name": "SANTA CLARA VALLEY MEDICAL CENTER", "county": "Santa Clara", "licensed_beds": 1337, "staffed_beds": 828, "discharges": 12292, "net_revenue": 908536282, "operating_expense": 1104914783, "occupancy_rate": 1.0, "revenue_per_discharge": 73912.81, "margin_pct": -21.61, "pct_medicare": 23.16, "pct_medical": 59.5, "pct_commercial": 17.33}, {"name": "SEQUOIA HOSPITAL", "county": "San Mateo", "licensed_beds": 184, "staffed_beds": 51, "discharges": 1129, "net_revenue": 76410422, "operating_expense": 80461777, "occupancy_rate": 0.91, "revenue_per_discharge": 67679.74, "margin_pct": -5.3, "pct_medicare": 38.85, "pct_medical": 1.62, "pct_commercial": 59.5}, {"name": "SONOMA SPECIALTY HOSPITAL", "county": "Sonoma", "licensed_beds": 58, "staffed_beds": 58, "discharges": 172, "net_revenue": 16892031, "operating_expense": 9900314, "occupancy_rate": 0.95, "revenue_per_discharge": 98209.48, "margin_pct": 41.39, "pct_medicare": 28.7, "pct_medical": 37.69, "pct_commercial": 33.55}, {"name": "SONOMA VALLEY HOSPITAL", "county": "Sonoma", "licensed_beds": 51, "staffed_beds": 39, "discharges": 296, "net_revenue": 22493464, "operating_expense": 24241313, "occupancy_rate": 0.93, "revenue_per_discharge": 75991.43, "margin_pct": -7.77, "pct_medicare": 22.74, "pct_medical": 41.2, "pct_commercial": 34.27}, {"name": "ST. ROSE HOSPITAL", "county": "Alameda", "licensed_beds": 155, "staffed_beds": 46, "discharges": 880, "net_revenue": 21908445, "operating_expense": 34942240, "occupancy_rate": 0.91, "revenue_per_discharge": 24895.96, "margin_pct": -59.49, "pct_medicare": 40.85, "pct_medical": 25.99, "pct_commercial": 37.25}, {"name": "STANFORD HEALTH CARE", "county": "Santa Clara", "licensed_beds": 622, "staffed_beds": 750, "discharges": 9591, "net_revenue": 2224759396, "operating_expense": 2125025915, "occupancy_rate": 0.99, "revenue_per_discharge": 231963.24, "margin_pct": 4.48, "pct_medicare": 26.13, "pct_medical": 7.93, "pct_commercial": 65.56}, {"name": "STANFORD HEALTH CARE TRI-VALLEY", "county": "Alameda", "licensed_beds": 242, "staffed_beds": 207, "discharges": 2440, "net_revenue": 145601125, "operating_expense": 142264696, "occupancy_rate": 0.58, "revenue_per_discharge": 59672.59, "margin_pct": 2.29, "pct_medicare": 31.34, "pct_medical": 4.28, "pct_commercial": 64.07}, {"name": "SUTTER DELTA MEDICAL CENTER", "county": "Contra Costa", "licensed_beds": 141, "staffed_beds": 80, "discharges": 1787, "net_revenue": 71912990, "operating_expense": 62303325, "occupancy_rate": 0.98, "revenue_per_discharge": 40242.3, "margin_pct": 13.36, "pct_medicare": 23.5, "pct_medical": 34.34, "pct_commercial": 42.16}, {"name": "SUTTER SANTA ROSA REGIONAL HOSPITAL", "county": "Sonoma", "licensed_beds": 124, "staffed_beds": 104, "discharges": 2294, "net_revenue": 123126587, "operating_expense": 124936852, "occupancy_rate": 0.99, "revenue_per_discharge": 53673.32, "margin_pct": -1.47, "pct_medicare": 28.54, "pct_medical": 15.88, "pct_commercial": 54.37}, {"name": "SUTTER SOLANO MEDICAL CENTER", "county": "Solano", "licensed_beds": 106, "staffed_beds": 49, "discharges": 915, "net_revenue": 40627576, "operating_expense": 44612279, "occupancy_rate": 0.98, "revenue_per_discharge": 44401.72, "margin_pct": -9.81, "pct_medicare": 48.89, "pct_medical": 20.23, "pct_commercial": 28.5}, {"name": "TELECARE HERITAGE - PHF", "county": "Alameda", "licensed_beds": 26, "staffed_beds": 26, "discharges": 277, "net_revenue": 3170846, "operating_expense": 3746900, "occupancy_rate": 0.71, "revenue_per_discharge": 11447.1, "margin_pct": -18.17, "pct_medicare": 0.45, "pct_medical": 0.0, "pct_commercial": 99.55}, {"name": "TELECARE WILLOW ROCK CENTER - PHF", "county": "Alameda", "licensed_beds": 16, "staffed_beds": 16, "discharges": 176, "net_revenue": 2145385, "operating_expense": 2181291, "occupancy_rate": 0.59, "revenue_per_discharge": 12189.69, "margin_pct": -1.67, "pct_medicare": 0.0, "pct_medical": 0.0, "pct_commercial": 92.67}, {"name": "UCSF BENIOFF CHILDREN'S HOSPITAL OAKLAND", "county": "Alameda", "licensed_beds": 163, "staffed_beds": 163, "discharges": 2040, "net_revenue": 148900510, "operating_expense": 223539993, "occupancy_rate": 0.67, "revenue_per_discharge": 72990.45, "margin_pct": -50.13, "pct_medicare": 0.8, "pct_medical": 47.59, "pct_commercial": 51.61}, {"name": "UCSF HEALTH - ST. MARY'S HOSPITAL", "county": "San Francisco", "licensed_beds": 267, "staffed_beds": 122, "discharges": 1697, "net_revenue": 70640350, "operating_expense": 90249716, "occupancy_rate": 0.99, "revenue_per_discharge": 41626.61, "margin_pct": -27.76, "pct_medicare": 57.88, "pct_medical": 8.39, "pct_commercial": 29.07}, {"name": "UCSF HEALTH HYDE HOSPITAL", "county": "San Francisco", "licensed_beds": 277, "staffed_beds": 80, "discharges": 1100, "net_revenue": 45477779, "operating_expense": 68744184, "occupancy_rate": 0.99, "revenue_per_discharge": 41343.44, "margin_pct": -51.16, "pct_medicare": 39.94, "pct_medical": 19.8, "pct_commercial": 37.35}, {"name": "UCSF MEDICAL CENTER", "county": "San Francisco", "licensed_beds": 978, "staffed_beds": 765, "discharges": 9089, "net_revenue": 1986910326, "operating_expense": 1967750584, "occupancy_rate": 1.0, "revenue_per_discharge": 218606.04, "margin_pct": 0.96, "pct_medicare": 25.25, "pct_medical": 18.06, "pct_commercial": 54.82}, {"name": "WASHINGTON HOSPITAL - FREMONT", "county": "Alameda", "licensed_beds": 385, "staffed_beds": 197, "discharges": 3514, "net_revenue": 178146856, "operating_expense": 181580930, "occupancy_rate": 1.0, "revenue_per_discharge": 50696.32, "margin_pct": -1.93, "pct_medicare": 31.27, "pct_medical": 16.38, "pct_commercial": 51.93}, {"name": "ZUCKERBERG SAN FRANCISCO GENERAL HOSPITAL & TRAUMA CENTER", "county": "San Francisco", "licensed_beds": 397, "staffed_beds": 311, "discharges": 4037, "net_revenue": 293889259, "operating_expense": 399506404, "occupancy_rate": 0.99, "revenue_per_discharge": 72798.92, "margin_pct": -35.94, "pct_medicare": 24.62, "pct_medical": 60.49, "pct_commercial": 14.88}], "counties": [{"county": "Alameda", "facility_count": 17, "population": 1661903.0, "occupancy_rate": 0.88, "revenue_per_discharge": 59861.82, "margin_pct": -10.57, "pct_medicare": 26.71, "pct_medical": 23.47, "pct_commercial": 49.18, "discharges_per_1k_pop": 19.95, "margin_zscore": -0.27}, {"county": "Contra Costa", "facility_count": 8, "population": 1161921.0, "occupancy_rate": 0.94, "revenue_per_discharge": 61773.83, "margin_pct": -3.33, "pct_medicare": 36.4, "pct_medical": 24.93, "pct_commercial": 38.49, "discharges_per_1k_pop": 16.78, "margin_zscore": 0.51}, {"county": "Marin", "facility_count": 4, "population": 252239.0, "occupancy_rate": 0.78, "revenue_per_discharge": 67299.16, "margin_pct": -8.92, "pct_medicare": 35.02, "pct_medical": 11.75, "pct_commercial": 51.99, "discharges_per_1k_pop": 17.8, "margin_zscore": -0.1}, {"county": "Napa", "facility_count": 3, "population": 136411.0, "occupancy_rate": 0.92, "revenue_per_discharge": 77030.98, "margin_pct": -29.82, "pct_medicare": 55.71, "pct_medical": 17.9, "pct_commercial": 21.27, "discharges_per_1k_pop": 20.11, "margin_zscore": -2.34}, {"county": "San Francisco", "facility_count": 11, "population": 843130.0, "occupancy_rate": 0.93, "revenue_per_discharge": 119645.01, "margin_pct": -5.28, "pct_medicare": 27.43, "pct_medical": 21.1, "pct_commercial": 49.99, "discharges_per_1k_pop": 31.67, "margin_zscore": 0.3}, {"county": "San Mateo", "facility_count": 6, "population": 747417.0, "occupancy_rate": 0.79, "revenue_per_discharge": 71488.1, "margin_pct": 0.22, "pct_medicare": 25.69, "pct_medical": 17.58, "pct_commercial": 55.88, "discharges_per_1k_pop": 13.39, "margin_zscore": 0.89}, {"county": "Santa Clara", "facility_count": 9, "population": 1926809.0, "occupancy_rate": 0.91, "revenue_per_discharge": 113602.28, "margin_pct": 1.02, "pct_medicare": 21.83, "pct_medical": 18.08, "pct_commercial": 59.07, "discharges_per_1k_pop": 23.14, "margin_zscore": 0.97}, {"county": "Solano", "facility_count": 6, "population": 451773.0, "occupancy_rate": 0.88, "revenue_per_discharge": 58737.56, "margin_pct": -11.65, "pct_medicare": 27.4, "pct_medical": 13.99, "pct_commercial": 60.9, "discharges_per_1k_pop": 18.34, "margin_zscore": -0.39}, {"county": "Sonoma", "facility_count": 8, "population": 483481.0, "occupancy_rate": 0.96, "revenue_per_discharge": 52145.8, "margin_pct": -3.99, "pct_medicare": 33.53, "pct_medical": 17.09, "pct_commercial": 47.34, "discharges_per_1k_pop": 20.99, "margin_zscore": 0.43}]};
+
+// =====================================================================
+// TAB NAVIGATION
+// =====================================================================
+const tabs = document.querySelectorAll('nav.tabs button');
+const views = document.querySelectorAll('.view');
+tabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.remove('active'));
+    views.forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'view-compare' && !chartsBuilt) buildCharts();
+    if (btn.dataset.view === 'view-3d') onResize3D();
+  });
+});
+
+// =====================================================================
+// 3D SCENE
+// =====================================================================
+const container = document.getElementById('canvas-container');
+const infoPanel = document.getElementById('info-panel');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0B1420);
+scene.fog = new THREE.Fog(0x0B1420, 40, 110);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+camera.position.set(28, 22, 34);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.minDistance = 12;
+controls.maxDistance = 80;
+controls.maxPolarAngle = Math.PI / 2.05;
+renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+
+// lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 0.9);
+key.position.set(20, 30, 10);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x5FB3A3, 0.25);
+rim.position.set(-20, 10, -20);
+scene.add(rim);
+
+// ground
+const groundGeo = new THREE.PlaneGeometry(200, 200);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0E1826, roughness: 1 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.01;
+scene.add(ground);
+
+const gridHelper = new THREE.GridHelper(200, 80, 0x1E2E44, 0x162438);
+scene.add(gridHelper);
+
+// ---- color mapping: diverging around 0% margin ----
+const cLoss = new THREE.Color(0xC1654F);
+const cMid  = new THREE.Color(0x5A6B7A);
+const cGain = new THREE.Color(0x5FB3A3);
+function marginColor(margin){
+  const t = Math.max(0, Math.min(1, (margin + 60) / 100)); // -60% -> 0, +40% -> 1
+  const out = new THREE.Color();
+  if (t < 0.6) out.lerpColors(cLoss, cMid, t / 0.6);
+  else out.lerpColors(cMid, cGain, (t - 0.6) / 0.4);
+  return out;
+}
+
+// ---- height scaling ----
+function scaleHeight(value, minVal, maxVal, minH, maxH){
+  const v = Math.max(minVal, Math.min(maxVal, value));
+  return minH + (v - minVal) / (maxVal - minVal) * (maxH - minH);
+}
+function heightFor(f, metric){
+  if (metric === 'occupancy_rate') {
+    return scaleHeight(f.occupancy_rate, 0, 1, 0.3, 9);
+  }
+  const logVal = Math.log10(Math.max(f.revenue_per_discharge, 1000));
+  return scaleHeight(logVal, Math.log10(10000), Math.log10(350000), 0.3, 9);
+}
+
+// ---- text sprite for county labels ----
+function makeLabelSprite(text, color){
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 512; canvas.height = 128;
+  ctx.font = '600 46px IBM Plex Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.fillText(text.toUpperCase(), 256, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(9, 2.2, 1);
+  return sprite;
+}
+
+// ---- layout: cluster facilities by county ----
+let currentMetric = 'revenue_per_discharge'; // must be declared before the build loop below uses it
+const counties = DATA.counties.map(c => c.county);
+const clusterSpacingX = 15;
+const facilitySpacing = 2.3;
+
+const barMeshes = [];
+
+counties.forEach((countyName, ci) => {
+  const facs = DATA.facilities.filter(f => f.county === countyName);
+  const cols = Math.ceil(Math.sqrt(facs.length));
+  const clusterX = (ci - (counties.length - 1) / 2) * clusterSpacingX;
+
+  const label = makeLabelSprite(countyName, countyName === 'San Mateo' ? '#C9A24B' : '#8CA0B5');
+  label.position.set(clusterX, 10.5, 0);
+  scene.add(label);
+
+  facs.forEach((f, fi) => {
+    const row = Math.floor(fi / cols);
+    const col = fi % cols;
+    const x = clusterX + (col - (cols - 1) / 2) * facilitySpacing;
+    const z = (row - (cols - 1) / 2) * facilitySpacing;
+
+    const h = heightFor(f, currentMetric);
+    const geo = new THREE.BoxGeometry(1.5, h, 1.5);
+    const mat = new THREE.MeshStandardMaterial({ color: marginColor(f.margin_pct), roughness: 0.55, metalness: 0.05 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, h / 2, z);
+    mesh.userData = f;
+    scene.add(mesh);
+    barMeshes.push(mesh);
+
+    if (countyName === 'San Mateo') {
+      const edges = new THREE.EdgesGeometry(geo);
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xC9A24B, linewidth: 2 }));
+      line.position.copy(mesh.position);
+      scene.add(line);
+      mesh.userData._edgeLine = line;
+    }
+  });
+});
+
+function rebuildHeights(metric){
+  currentMetric = metric;
+  barMeshes.forEach(mesh => {
+    const f = mesh.userData;
+    const h = heightFor(f, metric);
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.BoxGeometry(1.5, h, 1.5);
+    mesh.position.y = h / 2;
+    if (mesh.userData._edgeLine) {
+      mesh.userData._edgeLine.geometry.dispose();
+      mesh.userData._edgeLine.geometry = new THREE.EdgesGeometry(mesh.geometry);
+      mesh.userData._edgeLine.position.y = h / 2;
+    }
+  });
+}
+
+document.querySelectorAll('.metric-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    rebuildHeights(btn.dataset.metric);
+  });
+});
+
+// ---- raycasting / click to inspect ----
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (event) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(barMeshes);
+  if (hits.length > 0) {
+    showStatement(hits[0].object.userData);
+  }
+});
+
+function fmtCurrency(v){
+  return '$' + Math.round(v).toLocaleString('en-US');
+}
+function showStatement(f){
+  const marginClass = f.margin_pct >= 0 ? 'pos' : 'neg';
+  infoPanel.innerHTML = `
+    <div class="statement-head">
+      <span class="county-tag">${f.county} County</span>
+      <h3>${f.name}</h3>
+    </div>
+    <div class="statement-body">
+      <div class="statement-row"><span class="label">Licensed Beds</span><span class="value">${f.licensed_beds}</span></div>
+      <div class="statement-row"><span class="label">Discharges (Q1)</span><span class="value">${f.discharges.toLocaleString()}</span></div>
+      <div class="statement-row"><span class="label">Net Revenue</span><span class="value">${fmtCurrency(f.net_revenue)}</span></div>
+      <div class="statement-row"><span class="label">Revenue / Discharge</span><span class="value">${fmtCurrency(f.revenue_per_discharge)}</span></div>
+      <div class="statement-row"><span class="label">Operating Margin</span><span class="value ${marginClass}">${f.margin_pct.toFixed(1)}%</span></div>
+      <div class="statement-row"><span class="label">Occupancy Rate</span><span class="value">${(f.occupancy_rate*100).toFixed(0)}%</span></div>
+      <div class="statement-row"><span class="label">Medicare / Medi-Cal / Comm.</span><span class="value">${f.pct_medicare.toFixed(0)} / ${f.pct_medical.toFixed(0)} / ${f.pct_commercial.toFixed(0)}</span></div>
+    </div>
+    <div class="statement-foot">HCAI Q1 2026 &middot; CA-436-BAY</div>
+  `;
+  infoPanel.classList.remove('hidden');
+}
+
+// ---- resize handling ----
+function onResize3D(){
+  const w = container.clientWidth, h = container.clientHeight;
+  if (w === 0 || h === 0) return;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+window.addEventListener('resize', onResize3D);
+setTimeout(onResize3D, 50);
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// =====================================================================
+// COMPARISON CHARTS (built lazily on first tab visit)
+// =====================================================================
+let chartsBuilt = false;
+function buildCharts(){
+  chartsBuilt = true;
+  const counties = [...DATA.counties].sort((a,b) => a.margin_pct - b.margin_pct);
+  const labels = counties.map(c => c.county);
+  const isSanMateo = c => c === 'San Mateo';
+
+  Chart.defaults.color = '#8CA0B5';
+  Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+  Chart.defaults.borderColor = '#26394F';
+
+  // -- margin bar chart --
+  new Chart(document.getElementById('marginChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: counties.map(c => c.margin_pct),
+        backgroundColor: counties.map(c => isSanMateo(c.county) ? '#C9A24B' : (c.margin_pct >= 0 ? '#5FB3A3' : '#C1654F')),
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Operating Margin %' }, grid: { color: '#1E2E44' } },
+        y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } }
+      }
+    }
+  });
+
+  // -- payer mix stacked bar --
+  new Chart(document.getElementById('payerChart'), {
+    type: 'bar',
+    data: {
+      labels: DATA.counties.map(c => c.county),
+      datasets: [
+        { label: 'Medicare', data: DATA.counties.map(c => c.pct_medicare), backgroundColor: '#5FB3A3' },
+        { label: 'Medi-Cal', data: DATA.counties.map(c => c.pct_medical), backgroundColor: '#C9A24B' },
+        { label: 'Commercial', data: DATA.counties.map(c => c.pct_commercial), backgroundColor: '#4A6FA5' },
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { stacked: true, title: { display: true, text: '% of Net Revenue' }, grid: { color: '#1E2E44' } },
+        y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } }
+      }
+    }
+  });
+
+  // -- scatter: margin vs discharges per 1k --
+  new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: 'Bay Area Counties',
+        data: DATA.counties.map(c => ({ x: c.discharges_per_1k_pop, y: c.margin_pct, county: c.county })),
+        backgroundColor: DATA.counties.map(c => isSanMateo(c.county) ? '#C9A24B' : '#5FB3A3'),
+        pointRadius: DATA.counties.map(c => isSanMateo(c.county) ? 9 : 6),
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.raw.county}: margin ${ctx.raw.y.toFixed(1)}%, ${ctx.raw.x.toFixed(1)} discharges/1k` } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Discharges per 1,000 Residents' }, grid: { color: '#1E2E44' } },
+        y: { title: { display: true, text: 'Operating Margin %' }, grid: { color: '#1E2E44' } }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
