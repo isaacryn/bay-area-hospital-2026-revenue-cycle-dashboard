@@ -6,7 +6,9 @@ An interactive dashboard comparing hospital revenue, payer mix, occupancy, and o
 
 **[Live Demo](https://isaacryn.github.io/bay-area-hospital-2026-revenue-cycle-dashboard/)** · Analysis notebook: (https://www.kaggle.com/code/isaacnguyen/data-analysis-of-ca-hospital-revenue-in-2026)
 
-![Dashboard screenshot](screenshot.png)
+<img width="2513" height="1194" alt="Interactive3D" src="https://github.com/user-attachments/assets/d85a8a46-c070-4202-8e60-e709b17a1c2d" />
+
+
 
 ## Key Findings
 
